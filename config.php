@@ -1,16 +1,21 @@
 <?php
 
+// ONLY FOR OPTIONS: LOGIN, ACCESS_TOKEN, HASHTAG:
+// IF CACHE FILE EXIST, DELETE IT OR WAIT "CACHE EXPIRATION TIME" TO APPLY CHANGES! 
+
 $CONFIG = array(
 
 	// Instagram login
-	'LOGIN' => 'fotokto_ru',
+	'LOGIN' => '',
 
-	// CLIEN_ID of Instagram application
-	'CLIENT_ID' => 'bd15adcf901046049a5cc89fed0e2e23',
+	// ACCESS TOKEN granted to you by some Instagram app.
+	// Follow this link: http://inwidget.ru/getAccessToken.php
+	// to get your own ACCESS TOKEN by inWidget app.
+	'ACCESS_TOKEN' => '',
 
 	// Get pictures from WORLDWIDE by tag name. 
 	// Use this options only if you want show pictures of other users. 
-	// Important! Profile avatar and statistic will be hidden.
+	// Profile avatar and statistic will be hidden.
 	'HASHTAG' => '',
 
 	// Random order of pictures [ true / false ]

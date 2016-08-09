@@ -8,9 +8,9 @@
  * http://inwidget.ru/MIT-license.txt
  * 
  * @link http://inwidget.ru
- * @copyright 2014 Alexandr Kazarmshchikov
+ * @copyright 2015 Alexandr Kazarmshchikov
  * @author Alexandr Kazarmshchikov
- * @version 1.0.6
+ * @version 1.0.7
  * @package inWidget
  *
  */
@@ -31,9 +31,14 @@ class inWidget {
 	public $errors = array(
 		101=>'Can\'t get access to file <b>{$cacheFile}</b>. Check permissions.',
 		102=>'Can\'t get modification time of <b>{$cacheFile}</b>. Cache always be expired.',
-		103=>'Can\'t send request. You need the cURL extension OR set allow_url_fopen to "true" in php.ini and openssl extension',
-		401=>'Can\'t get correct answer from Instagram API server. <br />If you want send request again, delete cache file or wait cache expiration. API server answer: <br /><br />{$answer}',
-		402=>'Can\'t get data from Instagram API server. User OR CLIENT_ID not found.<br />If you want send request again, delete cache file or wait cache expiration.',
+		103=>'Can\'t send request. You need the cURL extension OR set allow_url_fopen to "true" in php.ini and openssl extension',	
+		401=>'Can\'t get correct answer from Instagram API server. <br />If you want send request again, delete cache file or wait cache expiration. API server answer: <br /><br />{$answer}',	
+		// 402 error depricated
+		// 403 error depricated
+		404=>'User not found.<br />API server answer: <br /><br />{$answer}',
+		405=>'Invalid ACCESS TOKEN.<br />API server answer: <br /><br />{$answer}',
+		406=>'The maximum number of requests per hour has been exceeded.<br />API server answer: <br /><br />{$answer}',
+		407=>'Unknown error.<br />API server answer: <br /><br />{$answer}',
 	);
 	public function __construct(){
 		require_once 'config.php';
@@ -47,62 +52,50 @@ class inWidget {
 		// -------------------------------------------------
 		// Query #1. Try to get user ID and profile picture
 		// -------------------------------------------------
-		$this->answer = $this->send('https://api.instagram.com/v1/users/search?q='.$this->config['LOGIN'].'&client_id='.$this->config['CLIENT_ID']);
+		$this->answer = $this->send('https://api.instagram.com/v1/users/search?q='.$this->config['LOGIN'].'&access_token='.$this->config['ACCESS_TOKEN']);
 		$answer = json_decode($this->answer);
-		if(is_object($answer)){
-			if($answer->meta->code == 200 AND !empty($answer->data)){
-				foreach ($answer->data as $key=>$item){
-					if($item->username == $this->config['LOGIN']){
-						$this->data['userid'] 	= $item->id;
-						$this->data['username'] = $item->username;
-						$this->data['avatar'] 	= $item->profile_picture;
-						break;
-					}
-				}
-				if(empty($this->data['userid'])) die($this->getError(402));
+		$this->checkAnswer($answer);
+		foreach ($answer->data as $key=>$item){
+			if($item->username == $this->config['LOGIN']){
+				$this->data['userid'] 	= $item->id;
+				$this->data['username'] = $item->username;
+				$this->data['avatar'] 	= $item->profile_picture;
+				break;
 			}
-			else die($this->getError(402));
 		}
-		else die($this->getError(401));
+		if(empty($this->data['userid'])) die($this->getError(404));
 		// -------------------------------------------------
 		// Query #2. Try to get profile statistic
 		// -------------------------------------------------
-		$this->answer = $this->send('https://api.instagram.com/v1/users/'.$this->data['userid'].'/?client_id='.$this->config['CLIENT_ID'].'');
+		$this->answer = $this->send('https://api.instagram.com/v1/users/'.$this->data['userid'].'/?access_token='.$this->config['ACCESS_TOKEN'].'');
 		$answer = json_decode($this->answer);
-		if(is_object($answer)){
-			if($answer->meta->code == 200 AND !empty($answer->data)){
-				$this->data['posts']	 = $answer->data->counts->media;
-				$this->data['followers'] = $answer->data->counts->followed_by;
-				$this->data['following'] = $answer->data->counts->follows;
-			}
-			else die($this->getError(402));
-		}
-		else die($this->getError(401));
+		$this->checkAnswer($answer);
+		$this->data['posts']	 = $answer->data->counts->media;
+		$this->data['followers'] = $answer->data->counts->followed_by;
+		$this->data['following'] = $answer->data->counts->follows;
 		// -------------------------------------------------
 		// Query #3. Try to get photo
 		// -------------------------------------------------
 		if(!empty($this->config['HASHTAG'])){
-			$this->answer = $this->send('https://api.instagram.com/v1/tags/'.urlencode($this->config['HASHTAG']).'/media/recent/?client_id='.$this->config['CLIENT_ID'].'&count='.$this->config['imgCount']);
+			$this->answer = $this->send('https://api.instagram.com/v1/tags/'.urlencode($this->config['HASHTAG']).'/media/recent/?access_token='.$this->config['ACCESS_TOKEN']);
 		}
-		else $this->answer = $this->send('https://api.instagram.com/v1/users/'.$this->data['userid'].'/media/recent/?client_id='.$this->config['CLIENT_ID'].'&count='.$this->config['imgCount']);
+		else {
+			$this->answer = $this->send('https://api.instagram.com/v1/users/'.$this->data['userid'].'/media/recent/?access_token='.$this->config['ACCESS_TOKEN'].'&count='.$this->config['imgCount']);
+		}
 		$answer = json_decode($this->answer);
-		if(is_object($answer)){
-			if($answer->meta->code == 200){
-				if(!empty($answer->data)){
-					$images = array();
-					foreach ($answer->data as $key=>$item){
-						$images[$key]['link'] 		= $item->link;
-						$images[$key]['large'] 		= $item->images->low_resolution->url;
-						$images[$key]['fullsize'] 	= $item->images->standard_resolution->url;
-						$images[$key]['small'] 		= $item->images->thumbnail->url;
-					}
-					$this->data['images'] = $images;
-				}
-				else $this->data['images'] = array();
+		$this->checkAnswer($answer);
+		if(!empty($answer->data)){
+			$images = array();
+			foreach ($answer->data as $key=>$item){
+				$images[$key]['text'] 		= $item->caption->text;
+				$images[$key]['link'] 		= $item->link;
+				$images[$key]['large'] 		= $item->images->low_resolution->url;
+				$images[$key]['fullsize'] 	= $item->images->standard_resolution->url;
+				$images[$key]['small'] 		= $item->images->thumbnail->url;
 			}
-			else die($this->getError(402));
+			$this->data['images'] = $images;
 		}
-		else die($this->getError(401));
+		else $this->data['images'] = array();
 	}
 	public function getData(){
 		$this->data = $this->getCache();
@@ -154,10 +147,10 @@ class inWidget {
 			$this->config['LOGIN'] = strtolower(trim($this->config['LOGIN']));
 		}
 		else die('LOGIN required in config.php');
-		if(!empty($this->config['CLIENT_ID'])){
-			$this->config['CLIENT_ID'] = strtolower(trim($this->config['CLIENT_ID']));
+		if(!empty($this->config['ACCESS_TOKEN'])){
+			$this->config['ACCESS_TOKEN'] = strtolower(trim($this->config['ACCESS_TOKEN']));
 		}
-		else die('CLIENT_ID required in config.php');
+		else die('ACCESS_TOKEN required in config.php');
 		if(!empty($this->config['langDefault'])){
 			$this->config['langDefault'] = strtolower(trim($this->config['langDefault']));
 		}
@@ -166,6 +159,13 @@ class inWidget {
 			$this->config['HASHTAG'] = trim($this->config['HASHTAG']);
 			$this->config['HASHTAG'] = str_replace('#','',$this->config['HASHTAG']);
 		}
+	}
+	public function checkAnswer($answer){
+		if(!is_object($answer)) die($this->getError(401));
+		if($answer->meta->code == 200 AND empty($answer->data)) die($this->getError(404));
+		if($answer->meta->code == 400) die($this->getError(405));
+		if($answer->meta->code == 429) die($this->getError(406));
+		if($answer->meta->code != 200) die($this->getError(407));
 	}
 	public function checkCacheRights(){
 		$cacheFile = @fopen($this->cacheFile,'a+b');
@@ -209,7 +209,7 @@ class inWidget {
 		$this->errors[$code] = str_replace('{$cacheFile}',$this->cacheFile,$this->errors[$code]);
 		$this->errors[$code] = str_replace('{$answer}',strip_tags($this->answer),$this->errors[$code]);
 		$result = '<b>ERROR <a href="http://inwidget.ru/#error'.$code.'" target="_blank">#'.$code.'</a>:</b> '.$this->errors[$code];
-		if($code == 401 OR $code == 402){
+		if($code >= 401){
 			file_put_contents($this->cacheFile,$result,LOCK_EX);
 		}
 		return $result;
